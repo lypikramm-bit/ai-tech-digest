@@ -10,7 +10,7 @@ import html
 
 class FreeAITechAgent:
     def __init__(self):
-        self.bot = Bot(token=os.environ["TELEGRAM_BOT_TOKEN"])  # ИСПРАВЛЕНО: было TELEGRAMOT_TOKEN
+        self.bot = Bot(token=os.environ["TELEGRAM_BOT_TOKEN"])
         self.channel_id = os.environ["TELEGRAM_CHANNEL_ID"]
         self.unsplash_key = os.environ["UNSPLASH_ACCESS_KEY"]
         self.reddit_headers = {"User-agent": "AITechBot/1.0"}
@@ -91,7 +91,7 @@ class FreeAITechAgent:
    — &gt; вместо >
    — &amp; вместо &
 ✅ Никаких **звёздочек** или _подчёркиваний_ — только HTML-теги
-✅ Максимум 900 символов (чтобы уместилось в подпись к фото)
+✅ Максимум 900 символов (лимит Telegram для подписи к фото)
 
 ПРИМЕР ИДЕАЛЬНОГО ПОСТА:
 <b>🎨 Бесплатные генераторы изображений 2026</b>
@@ -170,22 +170,46 @@ class FreeAITechAgent:
 <a href="https://leonardo.ai">Начать с Leonardo.ai</a>"""
     
     async def get_image(self):
-        """Релевантные картинки"""
+        """Надёжное получение изображения с защитой от ошибок Unsplash"""
         queries = [
             "ai art generation", "digital creativity", "neural network art",
             "creative technology", "prompt engineering", "generative design"
         ]
-        query = random.choice(queries)
         
-        try:
-            img = requests.get(
-                "https://api.unsplash.com/photos/random",
-                params={"query": query, "orientation": "landscape", "client_id": self.unsplash_key},
-                timeout=10
-            ).json()
-            return img["urls"]["regular"]
-        except:
-            return "https://images.unsplash.com/photo-1677234558153-bf5ce094bad4?w=1200&h=630&fit=crop"
+        # Попытка 1: запрос к Unsplash
+        for attempt in range(2):
+            try:
+                query = random.choice(queries)
+                print(f"🖼️ Попытка {attempt+1}: запрос к Unsplash '{query}'")
+                img = requests.get(
+                    "https://api.unsplash.com/photos/random",
+                    params={"query": query, "orientation": "landscape", "client_id": self.unsplash_key},
+                    timeout=10
+                ).json()
+                url = img["urls"]["regular"]
+                
+                # Проверка: ссылка должна вести на изображение (.jpg/.png)
+                if url.endswith(('.jpg', '.jpeg', '.png', '.webp')):
+                    print(f"✅ Получена прямая ссылка на изображение")
+                    return url
+                else:
+                    # Исправляем ссылку: добавляем параметр для прямой загрузки
+                    fixed_url = url.split('?')[0] + "?auto=compress&cs=tinysrgb&w=1200&h=630&fit=crop"
+                    print(f"✅ Исправлена ссылка на изображение")
+                    return fixed_url
+                    
+            except Exception as e:
+                print(f"⚠️ Ошибка Unsplash (попытка {attempt+1}): {e}")
+                continue
+        
+        # Фолбэк: гарантированно рабочие статические изображения
+        fallback_images = [
+            "https://images.unsplash.com/photo-1677234558153-bf5ce094bad4?auto=compress&cs=tinysrgb&w=1200&h=630&fit=crop",
+            "https://images.unsplash.com/photo-1682978256082-0b97a6a7f77e?auto=compress&cs=tinysrgb&w=1200&h=630&fit=crop",
+            "https://images.unsplash.com/photo-1679733087885-28eb46657ffb?auto=compress&cs=tinysrgb&w=1200&h=630&fit=crop"
+        ]
+        print(f"✅ Используем фолбэк-изображение")
+        return random.choice(fallback_images)
     
     async def publish(self):
         print(f"🚀 Запуск агента: {datetime.now()}")
@@ -195,12 +219,13 @@ class FreeAITechAgent:
             print(f"✅ Найдено {len(reddit_posts)} кейсов")
             
             text = await self.generate_text(reddit_posts)
-            print(f"✅ Текст:\n---\n{text}\n---")
+            print(f"✅ Текст сгенерирован ({len(text)} символов)")
             
+            # Получаем надёжную ссылку на изображение
             image_url = await self.get_image()
-            print(f"🖼️ Картинка: {image_url[:60]}")
+            print(f"🖼️ Картинка: {image_url[:70]}")
             
-            # ОДНО СООБЩЕНИЕ: изображение + текст в подписи
+            # Отправляем ОДНО сообщение: изображение + текст в подписи
             await self.bot.send_photo(
                 chat_id=self.channel_id,
                 photo=image_url,
@@ -210,16 +235,24 @@ class FreeAITechAgent:
             print(f"✅ Пост опубликован в {self.channel_id} (картинка + текст в одном сообщении)")
             
         except Exception as e:
-            print(f"❌ Ошибка: {e}")
+            print(f"❌ Ошибка публикации: {e}")
             print(traceback.format_exc())
-            # Фолбэк
-            await self.bot.send_photo(
-                chat_id=self.channel_id,
-                photo="https://images.unsplash.com/photo-1677234558153-bf5ce094bad4?w=1200&h=630&fit=crop",
-                caption=self._fallback_post(),
-                parse_mode="HTML"
-            )
-            print("✅ Фолбэк опубликован")
+            
+            # Фолбэк: отправка текста без картинки (чтобы не потерять пост)
+            try:
+                await self.bot.send_message(
+                    chat_id=self.channel_id,
+                    text=text,
+                    parse_mode="HTML"
+                )
+                print("✅ Текст опубликован без изображения (фолбэк)")
+            except:
+                await self.bot.send_message(
+                    chat_id=self.channel_id,
+                    text=self._fallback_post(),
+                    parse_mode="HTML"
+                )
+                print("✅ Фолбэк-пост опубликован")
 
 if __name__ == "__main__":
     asyncio.run(FreeAITechAgent().publish())
