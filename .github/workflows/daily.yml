@@ -1,8 +1,8 @@
-name: Ежедневный пост в канал
+name: Ежедневный пост — отправка в личку
 
 on:
   schedule:
-    - cron: '0 7 * * *'
+    - cron: '0 6 * * *'  # 06:00 UTC = 09:00 МСК
   workflow_dispatch:
 
 jobs:
@@ -20,10 +20,10 @@ jobs:
         run: |
           pip install python-telegram-bot==20.7 requests
       
-      - name: Запуск агента
+      - name: Отправка поста в личку
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+          TELEGRAM_USER_ID: ${{ secrets.TELEGRAM_USER_ID }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           UNSPLASH_ACCESS_KEY: ${{ secrets.UNSPLASH_ACCESS_KEY }}
         run: python main.py
