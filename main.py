@@ -10,7 +10,7 @@ import html
 
 class FreeAITechAgent:
     def __init__(self):
-        self.bot = Bot(token=os.environ["TELEGRAMOT_TOKEN"])
+        self.bot = Bot(token=os.environ["TELEGRAM_BOT_TOKEN"])  # ИСПРАВЛЕНО: было TELEGRAMOT_TOKEN
         self.channel_id = os.environ["TELEGRAM_CHANNEL_ID"]
         self.unsplash_key = os.environ["UNSPLASH_ACCESS_KEY"]
         self.reddit_headers = {"User-agent": "AITechBot/1.0"}
@@ -138,21 +138,15 @@ class FreeAITechAgent:
     
     def _clean_html(self, text):
         """Очищаем и валидируем HTML для Telegram"""
-        # Убираем лишние форматирования
         text = text.replace("**", "").replace("__", "").replace("```", "")
-        # Экранируем спецсимволы для HTML
         text = html.escape(text, quote=False)
-        # Восстанавливаем правильные теги
         text = re.sub(r'&lt;b&gt;(.*?)&lt;/b&gt;', r'<b>\1</b>', text)
         text = re.sub(r'&lt;i&gt;(.*?)&lt;/i&gt;', r'<i>\1</i>', text)
         text = re.sub(r'&lt;a href=&quot;(.*?)&quot;&gt;(.*?)&lt;/a&gt;', r'<a href="\1">\2</a>', text)
-        # Убираем запрещённые слова
         text = re.sub(r'(?i)лайфхак[:\s]*', '', text)
         text = re.sub(r'(?i)проверено[:\sа-я0-9]+', '', text)
-        # Обрезаем до 900 символов (лимит Telegram для подписи к фото)
         if len(text) > 900:
             text = text[:897] + "..."
-        # Фильтруем пустые строки
         lines = [line.rstrip() for line in text.split("\n") if line.strip()]
         return "\n".join(lines[:25])
     
@@ -206,30 +200,26 @@ class FreeAITechAgent:
             image_url = await self.get_image()
             print(f"🖼️ Картинка: {image_url[:60]}")
             
-            # ОТПРАВЛЯЕМ КАК ОДНО СООБЩЕНИЕ С ИЗОБРАЖЕНИЕМ И ТЕКСТОМ
+            # ОДНО СООБЩЕНИЕ: изображение + текст в подписи
             await self.bot.send_photo(
                 chat_id=self.channel_id,
                 photo=image_url,
                 caption=text,
-                parse_mode="HTML"  # Важно! Для корректного отображения форматирования
+                parse_mode="HTML"
             )
             print(f"✅ Пост опубликован в {self.channel_id} (картинка + текст в одном сообщении)")
             
         except Exception as e:
             print(f"❌ Ошибка: {e}")
             print(traceback.format_exc())
-            # Фолбэк: отправка как два сообщения (на всякий случай)
+            # Фолбэк
             await self.bot.send_photo(
                 chat_id=self.channel_id,
-                photo="https://images.unsplash.com/photo-1677234558153-bf5ce094bad4?w=1200&h=630&fit=crop"
-            )
-            await asyncio.sleep(1)
-            await self.bot.send_message(
-                chat_id=self.channel_id,
-                text=self._fallback_post(),
+                photo="https://images.unsplash.com/photo-1677234558153-bf5ce094bad4?w=1200&h=630&fit=crop",
+                caption=self._fallback_post(),
                 parse_mode="HTML"
             )
-            print("✅ Фолбэк опубликован (картинка + текст)")
+            print("✅ Фолбэк опубликован")
 
 if __name__ == "__main__":
     asyncio.run(FreeAITechAgent().publish())
